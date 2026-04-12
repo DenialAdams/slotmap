@@ -9,6 +9,9 @@ use core::mem::{replace, MaybeUninit};
 use core::num::NonZeroU32;
 use core::ops::{Index, IndexMut};
 
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
+
 use super::{Key, KeyData};
 use crate::util::is_older_version;
 
@@ -834,6 +837,104 @@ impl<K: Key, V> SecondaryMap<K, V> {
         ValuesMut {
             inner: self.iter_mut(),
         }
+    }
+
+    /// A parallel iterator visiting all key-value pairs in an arbitrary order.
+    ///
+    /// This function must iterate over all slots, empty or not. In the face of
+    /// many deleted elements it can be inefficient.
+    #[cfg(feature = "rayon")]
+    pub fn par_iter(&self) -> impl ParallelIterator<Item = (K, &V)> + '_
+    where
+        K: Send + Sync,
+        V: Sync,
+    {
+        self.slots.par_iter().enumerate().filter_map(|(idx, slot)| {
+            if idx == 0 {
+                return None;
+            }
+
+            match slot {
+                Occupied { value, version } => {
+                    Some((KeyData::new(idx as u32, version.get()).into(), value))
+                },
+                Vacant => None,
+            }
+        })
+    }
+
+    /// A parallel iterator visiting all key-value pairs in an arbitrary order,
+    /// with mutable references to the values.
+    #[cfg(feature = "rayon")]
+    pub fn par_iter_mut(&mut self) -> impl ParallelIterator<Item = (K, &mut V)> + '_
+    where
+        K: Send + Sync,
+        V: Send,
+    {
+        self.slots
+            .par_iter_mut()
+            .enumerate()
+            .filter_map(|(idx, slot)| {
+                if idx == 0 {
+                    return None;
+                }
+
+                match slot {
+                    Occupied { value, version } => {
+                        Some((KeyData::new(idx as u32, version.get()).into(), value))
+                    },
+                    Vacant => None,
+                }
+            })
+    }
+
+    /// A parallel iterator visiting all keys in an arbitrary order.
+    #[cfg(feature = "rayon")]
+    pub fn par_keys(&self) -> impl ParallelIterator<Item = K> + '_
+    where
+        K: Send + Sync,
+        V: Sync,
+    {
+        self.par_iter().map(|(key, _)| key)
+    }
+
+    /// A parallel iterator visiting all values in an arbitrary order.
+    #[cfg(feature = "rayon")]
+    pub fn par_values(&self) -> impl ParallelIterator<Item = &V> + '_
+    where
+        K: Send + Sync,
+        V: Sync,
+    {
+        self.par_iter().map(|(_, value)| value)
+    }
+
+    /// A parallel iterator visiting all values mutably in an arbitrary order.
+    #[cfg(feature = "rayon")]
+    pub fn par_values_mut(&mut self) -> impl ParallelIterator<Item = &mut V> + '_
+    where
+        K: Send + Sync,
+        V: Send,
+    {
+        self.par_iter_mut().map(|(_, value)| value)
+    }
+
+    /// A parallel iterator that moves key-value pairs out of the secondary
+    /// map.
+    #[cfg(feature = "rayon")]
+    pub fn into_par_iter(self) -> impl ParallelIterator<Item = (K, V)>
+    where
+        K: Send,
+        V: Send,
+    {
+        self.slots
+            .into_par_iter()
+            .enumerate()
+            .filter_map(|(idx, slot)| match slot {
+                Occupied { value, version } if idx != 0 => {
+                    Some((KeyData::new(idx as u32, version.get()).into(), value))
+                },
+                _ => None,
+            })
     }
 
     /// Gets the given key's corresponding [`Entry`] in the map for in-place

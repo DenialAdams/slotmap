@@ -61,7 +61,7 @@
 //! }
 //! ```
 //!
-//! # Serialization through [`serde`], [`no_std`] support and unstable features
+//! # Serialization through [`serde`], [`rayon`], [`no_std`] support and unstable features
 //!
 //! Both keys and the slot maps have full (de)seralization support through
 //! the [`serde`] library. A key remains valid for a slot map even after one or
@@ -73,6 +73,13 @@
 //!
 //! ```text
 //! slotmap = { version = "1.0", features = ["serde"] }
+//! ```
+//!
+//! If you want parallel iteration support through [`rayon`], enable the
+//! `rayon` feature flag:
+//!
+//! ```text
+//! slotmap = { version = "1.0", features = ["rayon"] }
 //! ```
 //!
 //! This crate also supports [`no_std`] environments, but does require the
@@ -182,6 +189,7 @@
 //! [`Vec`]: std::vec::Vec
 //! [`BTreeMap`]: std::collections::BTreeMap
 //! [`HashMap`]: std::collections::HashMap
+//! [`rayon`]: https://github.com/rayon-rs/rayon
 //! [`serde`]: https://github.com/serde-rs/serde
 //! [`slab`]: https://crates.io/crates/slab
 //! [`stable-vec`]: https://crates.io/crates/stable-vec
@@ -622,6 +630,54 @@ mod tests {
         let _ = sscm.keys().clone();
         let _ = sscm.values().clone();
         let _ = sscm.iter().clone();
+    }
+
+    #[cfg(feature = "rayon")]
+    #[test]
+    fn rayon_parallel_iteration() {
+        use rayon::iter::ParallelIterator;
+
+        use super::*;
+
+        let mut sm = SlotMap::new();
+        let k0 = sm.insert(10);
+        let k1 = sm.insert(20);
+        sm.remove(k0);
+        let k2 = sm.insert(30);
+
+        let mut slotmap_items: Vec<_> = sm.par_iter().map(|(k, v)| (k, *v)).collect();
+        slotmap_items.sort_by_key(|(k, _)| k.data().as_ffi());
+        assert_eq!(slotmap_items, vec![(k1, 20), (k2, 30)]);
+
+        let mut dense = DenseSlotMap::new();
+        let d0 = dense.insert(1);
+        let d1 = dense.insert(2);
+        let mut dense_keys: Vec<_> = dense.par_keys().collect();
+        dense_keys.sort_by_key(Key::data);
+        assert_eq!(dense_keys, vec![d0, d1]);
+        dense.par_values_mut().for_each(|value| *value *= 2);
+        let mut dense_values: Vec<_> = dense.par_values().copied().collect();
+        dense_values.sort();
+        assert_eq!(dense_values, vec![2, 4]);
+
+        #[allow(deprecated)]
+        let mut hop = HopSlotMap::new();
+        let _ = hop.insert(4);
+        let h1 = hop.insert(5);
+        hop.remove(h1);
+        let _h2 = hop.insert(6);
+        let mut hop_values: Vec<_> = hop.par_values().copied().collect();
+        hop_values.sort();
+        assert_eq!(hop_values, vec![4, 6]);
+        let hop_owned_sum: i32 = hop.into_par_iter().map(|(_, v)| v).sum();
+        assert_eq!(hop_owned_sum, 10);
+
+        let mut sec = SecondaryMap::new();
+        sec.insert(d0, 7);
+        sec.insert(d1, 8);
+        let mut sec_items: Vec<_> = sec.into_par_iter().collect();
+        sec_items.sort_by_key(|(k, _)| k.data().as_ffi());
+        assert_eq!(sec_items, vec![(d0, 7), (d1, 8)]);
     }
 
     #[cfg(feature = "serde")]

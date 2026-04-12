@@ -12,6 +12,9 @@ use core::iter::FusedIterator;
 use core::mem::MaybeUninit;
 use core::ops::{Index, IndexMut};
 
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
+
 use crate::util::{Never, PanicOnDrop, UnwrapNever};
 use crate::{DefaultKey, Key, KeyData};
 
@@ -1024,6 +1027,70 @@ impl<K: Key, V> DenseSlotMap<K, V> {
     /// ```
     pub fn as_mut_slices(&mut self) -> (&[K], &mut [V]) {
         (self.keys.as_slice(), self.values.as_mut_slice())
+    }
+
+    /// A parallel iterator visiting all key-value pairs in an arbitrary order.
+    #[cfg(feature = "rayon")]
+    pub fn par_iter(&self) -> impl ParallelIterator<Item = (K, &V)> + '_
+    where
+        K: Send + Sync,
+        V: Sync,
+    {
+        self.keys.par_iter().copied().zip(self.values.par_iter())
+    }
+
+    /// A parallel iterator visiting all key-value pairs in an arbitrary order,
+    /// with mutable references to the values.
+    #[cfg(feature = "rayon")]
+    pub fn par_iter_mut(&mut self) -> impl ParallelIterator<Item = (K, &mut V)> + '_
+    where
+        K: Send + Sync,
+        V: Send,
+    {
+        self.keys
+            .par_iter()
+            .copied()
+            .zip(self.values.par_iter_mut())
+    }
+
+    /// A parallel iterator visiting all keys in an arbitrary order.
+    #[cfg(feature = "rayon")]
+    pub fn par_keys(&self) -> impl ParallelIterator<Item = K> + '_
+    where
+        K: Send + Sync,
+        V: Sync,
+    {
+        self.keys.par_iter().copied()
+    }
+
+    /// A parallel iterator visiting all values in an arbitrary order.
+    #[cfg(feature = "rayon")]
+    pub fn par_values(&self) -> impl ParallelIterator<Item = &V> + '_
+    where
+        K: Send + Sync,
+        V: Sync,
+    {
+        self.values.par_iter()
+    }
+
+    /// A parallel iterator visiting all values mutably in an arbitrary order.
+    #[cfg(feature = "rayon")]
+    pub fn par_values_mut(&mut self) -> impl ParallelIterator<Item = &mut V> + '_
+    where
+        K: Send + Sync,
+        V: Send,
+    {
+        self.values.par_iter_mut()
+    }
+
+    /// A parallel iterator that moves key-value pairs out of the slot map.
+    #[cfg(feature = "rayon")]
+    pub fn into_par_iter(self) -> impl ParallelIterator<Item = (K, V)>
+    where
+        K: Send,
+        V: Send,
+    {
+        self.keys.into_par_iter().zip(self.values.into_par_iter())
     }
 }
 
