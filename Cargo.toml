@@ -18,7 +18,7 @@ std = []
 rayon = ["std", "dep:rayon"]
 
 [dependencies]
-rayon = { version = "1.10", optional = true }
+rayon = { version = "1.2", optional = true }
 serde = { version = "1.0", optional = true, default-features = false, features = ["derive", "alloc"] }
 
 [dev-dependencies]
