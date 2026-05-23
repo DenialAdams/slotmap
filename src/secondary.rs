@@ -846,21 +846,19 @@ impl<K: Key, V> SecondaryMap<K, V> {
     #[cfg(feature = "rayon")]
     pub fn par_iter(&self) -> impl ParallelIterator<Item = (K, &V)> + '_
     where
-        K: Send + Sync,
+        K: Send,
         V: Sync,
     {
-        self.slots.par_iter().enumerate().filter_map(|(idx, slot)| {
-            if idx == 0 {
-                return None;
-            }
-
-            match slot {
+        self.slots
+            .par_iter()
+            .enumerate()
+            .skip(1)
+            .filter_map(|(idx, slot)| match slot {
                 Occupied { value, version } => {
                     Some((KeyData::new(idx as u32, version.get()).into(), value))
                 },
                 Vacant => None,
-            }
-        })
+            })
     }
 
     /// A parallel iterator visiting all key-value pairs in an arbitrary order,
@@ -868,17 +866,14 @@ impl<K: Key, V> SecondaryMap<K, V> {
     #[cfg(feature = "rayon")]
     pub fn par_iter_mut(&mut self) -> impl ParallelIterator<Item = (K, &mut V)> + '_
     where
-        K: Send + Sync,
+        K: Send,
         V: Send,
     {
         self.slots
             .par_iter_mut()
             .enumerate()
+            .skip(1)
             .filter_map(|(idx, slot)| {
-                if idx == 0 {
-                    return None;
-                }
-
                 match slot {
                     Occupied { value, version } => {
                         Some((KeyData::new(idx as u32, version.get()).into(), value))
@@ -892,7 +887,7 @@ impl<K: Key, V> SecondaryMap<K, V> {
     #[cfg(feature = "rayon")]
     pub fn par_keys(&self) -> impl ParallelIterator<Item = K> + '_
     where
-        K: Send + Sync,
+        K: Send,
         V: Sync,
     {
         self.par_iter().map(|(key, _)| key)
@@ -902,7 +897,7 @@ impl<K: Key, V> SecondaryMap<K, V> {
     #[cfg(feature = "rayon")]
     pub fn par_values(&self) -> impl ParallelIterator<Item = &V> + '_
     where
-        K: Send + Sync,
+        K: Send,
         V: Sync,
     {
         self.par_iter().map(|(_, value)| value)
@@ -912,7 +907,7 @@ impl<K: Key, V> SecondaryMap<K, V> {
     #[cfg(feature = "rayon")]
     pub fn par_values_mut(&mut self) -> impl ParallelIterator<Item = &mut V> + '_
     where
-        K: Send + Sync,
+        K: Send,
         V: Send,
     {
         self.par_iter_mut().map(|(_, value)| value)
@@ -929,8 +924,9 @@ impl<K: Key, V> SecondaryMap<K, V> {
         self.slots
             .into_par_iter()
             .enumerate()
+            .skip(1)
             .filter_map(|(idx, slot)| match slot {
-                Occupied { value, version } if idx != 0 => {
+                Occupied { value, version } => {
                     Some((KeyData::new(idx as u32, version.get()).into(), value))
                 },
                 _ => None,

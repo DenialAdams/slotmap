@@ -1058,7 +1058,6 @@ impl<K: Key, V> DenseSlotMap<K, V> {
     pub fn par_keys(&self) -> impl ParallelIterator<Item = K> + '_
     where
         K: Send + Sync,
-        V: Sync,
     {
         self.keys.par_iter().copied()
     }
@@ -1067,7 +1066,6 @@ impl<K: Key, V> DenseSlotMap<K, V> {
     #[cfg(feature = "rayon")]
     pub fn par_values(&self) -> impl ParallelIterator<Item = &V> + '_
     where
-        K: Send + Sync,
         V: Sync,
     {
         self.values.par_iter()
@@ -1077,7 +1075,6 @@ impl<K: Key, V> DenseSlotMap<K, V> {
     #[cfg(feature = "rayon")]
     pub fn par_values_mut(&mut self) -> impl ParallelIterator<Item = &mut V> + '_
     where
-        K: Send + Sync,
         V: Send,
     {
         self.values.par_iter_mut()
