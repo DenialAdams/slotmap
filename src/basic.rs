@@ -1011,47 +1011,45 @@ impl<K: Key, V> SlotMap<K, V> {
     }
 
     /// A parallel iterator visiting all key-value pairs in an arbitrary order.
-    ///
+    /// The iterator element type is `(K, &'a V)`.
+    /// 
     /// This function must iterate over all slots, empty or not. In the face of
     /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
-    pub fn par_iter(&self) -> impl ParallelIterator<Item = (K, &V)> + '_
+    pub fn par_iter(&self) -> ParIter<'_, K, V>
     where
         K: Send,
         V: Sync,
     {
-        self.slots
-            .par_iter()
-            .enumerate()
-            .skip(1)
-            .filter_map(|(idx, slot)| match slot.get() {
-                Occupied(value) => Some((KeyData::new(idx as u32, slot.version).into(), value)),
-                Vacant(_) => None,
-            })
+        ParIter {
+            slots: self.slots.par_iter().enumerate(),
+            _k: PhantomData,
+        }
     }
 
     /// A parallel iterator visiting all key-value pairs in an arbitrary order,
-    /// with mutable references to the values.
+    /// with mutable references to the values. The iterator element type is
+    /// `(K, &'a mut V)`.
+    /// 
+    /// This function must iterate over all slots, empty or not. In the face of
+    /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
-    pub fn par_iter_mut(&mut self) -> impl ParallelIterator<Item = (K, &mut V)> + '_
+    pub fn par_iter_mut(&mut self) -> ParIterMut<'_, K, V>
     where
         K: Send,
         V: Send,
     {
-        self.slots
-            .par_iter_mut()
-            .enumerate()
-            .skip(1)
-            .filter_map(|(idx, slot)| {
-                let version = slot.version;
-                match slot.get_mut() {
-                    OccupiedMut(value) => Some((KeyData::new(idx as u32, version).into(), value)),
-                    VacantMut(_) => None,
-                }
-            })
+        ParIterMut {
+            slots: self.slots.par_iter_mut().enumerate(),
+            _k: PhantomData,
+        }
     }
 
-    /// A parallel iterator visiting all keys in an arbitrary order.
+    /// A parallel iterator visiting all keys in an arbitrary order. The iterator
+    /// element type is `K`.
+    ///
+    /// This function must iterate over all slots, empty or not. In the face of
+    /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
     pub fn par_keys(&self) -> impl ParallelIterator<Item = K> + '_
     where
@@ -1061,7 +1059,11 @@ impl<K: Key, V> SlotMap<K, V> {
         self.par_iter().map(|(key, _)| key)
     }
 
-    /// A parallel iterator visiting all values in an arbitrary order.
+    /// A parallel iterator visiting all values in an arbitrary order. The iterator
+    /// element type is `&'a V`.
+    ///
+    /// This function must iterate over all slots, empty or not. In the face of
+    /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
     pub fn par_values(&self) -> impl ParallelIterator<Item = &V> + '_
     where
@@ -1071,7 +1073,11 @@ impl<K: Key, V> SlotMap<K, V> {
         self.par_iter().map(|(_, value)| value)
     }
 
-    /// A parallel iterator visiting all values mutably in an arbitrary order.
+    /// A parallel iterator visiting all values mutably in an arbitrary order. The
+    /// iterator element type is `&'a mut V`.
+    ///
+    /// This function must iterate over all slots, empty or not. In the face of
+    /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
     pub fn par_values_mut(&mut self) -> impl ParallelIterator<Item = &mut V> + '_
     where
@@ -1079,29 +1085,6 @@ impl<K: Key, V> SlotMap<K, V> {
         V: Send,
     {
         self.par_iter_mut().map(|(_, value)| value)
-    }
-
-    /// A parallel iterator that moves key-value pairs out of the slot map.
-    #[cfg(feature = "rayon")]
-    pub fn into_par_iter(self) -> impl ParallelIterator<Item = (K, V)>
-    where
-        K: Send,
-        V: Send,
-    {
-        self.slots
-            .into_par_iter()
-            .enumerate()
-            .skip(1)
-            .filter_map(|(idx, mut slot)| {
-                if !slot.occupied() {
-                    return None;
-                }
-
-                let key = KeyData::new(idx as u32, slot.version).into();
-                slot.version = 0;
-                let value = unsafe { ManuallyDrop::take(&mut slot.u.value) };
-                Some((key, value))
-            })
     }
 }
 
@@ -1430,6 +1413,154 @@ impl<'a, K: Key, V> ExactSizeIterator for Values<'a, K, V> {}
 impl<'a, K: Key, V> ExactSizeIterator for ValuesMut<'a, K, V> {}
 impl<'a, K: Key, V> ExactSizeIterator for Drain<'a, K, V> {}
 impl<K: Key, V> ExactSizeIterator for IntoIter<K, V> {}
+
+/// A parallel iterator over the key-value pairs in a [`SlotMap`].
+///
+/// This iterator is created by [`SlotMap::par_iter`].
+#[cfg(feature = "rayon")]
+#[derive(Debug)]
+pub struct ParIter<'a, K: 'a + Key, V: 'a> {
+    slots: rayon::iter::Enumerate<rayon::slice::Iter<'a, Slot<V>>>,
+    _k: PhantomData<fn(K) -> K>,
+}
+
+#[cfg(feature = "rayon")]
+impl<'a, K, V> ParallelIterator for ParIter<'a, K, V>
+where
+    K: Key + Send,
+    V: Sync,
+{
+    type Item = (K, &'a V);
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.slots
+            .skip(1) // Skip sentinel.
+            .filter_map(|(idx, slot)| {
+                if let Occupied(value) = slot.get() {
+                    Some((KeyData::new(idx as u32, slot.version).into(), value))
+                } else {
+                    None
+                }
+            })
+            .drive_unindexed(consumer)
+    }
+}
+
+/// A parallel mutable iterator over the key-value pairs in a [`SlotMap`].
+///
+/// This iterator is created by [`SlotMap::par_iter_mut`].
+#[cfg(feature = "rayon")]
+#[derive(Debug)]
+pub struct ParIterMut<'a, K: 'a + Key, V: 'a> {
+    slots: rayon::iter::Enumerate<rayon::slice::IterMut<'a, Slot<V>>>,
+    _k: PhantomData<fn(K) -> K>,
+}
+
+#[cfg(feature = "rayon")]
+impl<'a, K, V> ParallelIterator for ParIterMut<'a, K, V>
+where
+    K: Key + Send,
+    V: Send,
+{
+    type Item = (K, &'a mut V);
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.slots
+            .skip(1) // Skip sentinel.
+            .filter_map(|(idx, slot)| {
+                let version = slot.version;
+                if let OccupiedMut(value) = slot.get_mut() {
+                    Some((KeyData::new(idx as u32, version).into(), value))
+                } else {
+                    None
+                }
+            })
+            .drive_unindexed(consumer)
+    }
+}
+
+/// A parallel iterator that moves key-value pairs out of a [`SlotMap`].
+///
+/// This iterator is created by calling the `into_par_iter` method on [`SlotMap`],
+/// provided by the [`IntoParallelIterator`] trait.
+#[cfg(feature = "rayon")]
+#[derive(Debug, Clone)]
+pub struct IntoParIter<K: Key, V> {
+    slots: rayon::iter::Enumerate<rayon::vec::IntoIter<Slot<V>>>,
+    _k: PhantomData<fn(K) -> K>,
+}
+
+#[cfg(feature = "rayon")]
+impl<K, V> ParallelIterator for IntoParIter<K, V>
+where
+    K: Key + Send,
+    V: Send,
+{
+    type Item = (K, V);
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.slots
+            .skip(1) // Skip sentinel.
+            .filter_map(|(idx, mut slot)| {
+                if !slot.occupied() {
+                    return None;
+                }
+
+                let key = KeyData::new(idx as u32, slot.version).into();
+                slot.version = 0;
+                let value = unsafe { ManuallyDrop::take(&mut slot.u.value) };
+                Some((key, value))
+            })
+            .drive_unindexed(consumer)
+    }
+}
+
+#[cfg(feature = "rayon")]
+impl<'a, K, V> IntoParallelIterator for &'a SlotMap<K, V> where
+    K: Key + Send,
+    V: Sync {
+    type Item = (K, &'a V);
+    type Iter = ParIter<'a, K, V>;
+
+    fn into_par_iter(self) -> Self::Iter {
+        self.par_iter()
+    }
+}
+
+#[cfg(feature = "rayon")]
+impl<'a, K, V> IntoParallelIterator for &'a mut SlotMap<K, V> where
+    K: Key + Send,
+    V: Send {
+    type Item = (K, &'a mut V);
+    type Iter = ParIterMut<'a, K, V>;
+
+    fn into_par_iter(self) -> Self::Iter {
+        self.par_iter_mut()
+    }
+}
+
+#[cfg(feature = "rayon")]
+impl<K, V> IntoParallelIterator for SlotMap<K, V>
+where K: Key + Send, V: Send {
+    type Item = (K, V);
+    type Iter = IntoParIter<K, V>;
+
+    fn into_par_iter(self) -> Self::Iter {
+        IntoParIter {
+            slots: self.slots.into_par_iter().enumerate(),
+            _k: PhantomData,
+        }
+    }
+}
 
 // Serialization with serde.
 #[cfg(feature = "serde")]
