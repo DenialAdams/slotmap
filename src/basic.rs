@@ -1562,6 +1562,15 @@ where K: Key + Send, V: Send {
     }
 }
 
+/// A parallel iterator over the keys in a [`SlotMap`].
+///
+/// This iterator is created by [`SlotMap::par_keys`].
+#[cfg(feature = "rayon")]
+#[derive(Debug)]
+pub struct ParKeys<'a, K: 'a + Key, V: 'a> {
+    inner: Iter<'a, K, V>,
+}
+
 // Serialization with serde.
 #[cfg(feature = "serde")]
 mod serialize {
