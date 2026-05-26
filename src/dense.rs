@@ -1402,6 +1402,7 @@ impl<K: Key, V> ExactSizeIterator for IntoIter<K, V> {}
 /// A parallel iterator over the key-value pairs in a [`DenseSlotMap`].
 ///
 /// This iterator is created by [`DenseSlotMap::par_iter`].
+#[cfg(feature = "rayon")]
 #[derive(Debug)]
 pub struct ParIter<'a, K: 'a + Key, V: 'a> {
     inner: rayon::iter::Zip<
@@ -1410,6 +1411,7 @@ pub struct ParIter<'a, K: 'a + Key, V: 'a> {
     >,
 }
 
+#[cfg(feature = "rayon")]
 impl<'a, K: 'a + Key, V: 'a> Clone for ParIter<'a, K, V> {
     fn clone(&self) -> Self {
         ParIter {
@@ -1462,6 +1464,7 @@ where
 /// A parallel mutable iterator over the key-value pairs in a [`DenseSlotMap`].
 ///
 /// This iterator is created by [`DenseSlotMap::par_iter_mut`].
+#[cfg(feature = "rayon")]
 #[derive(Debug)]
 pub struct ParIterMut<'a, K: 'a + Key, V: 'a> {
     inner: rayon::iter::Zip<
@@ -1514,11 +1517,13 @@ where
 /// A parallel iterator over the keys in a [`DenseSlotMap`].
 ///
 /// This iterator is created by [`DenseSlotMap::par_keys`].
+#[cfg(feature = "rayon")]
 #[derive(Debug)]
 pub struct ParKeys<'a, K: 'a + Key> {
     inner: rayon::iter::Copied<rayon::slice::Iter<'a, K>>,
 }
 
+#[cfg(feature = "rayon")]
 impl<'a, K: 'a + Key> Clone for ParKeys<'a, K> {
     fn clone(&self) -> Self {
         ParKeys {
@@ -1569,11 +1574,13 @@ where
 /// An iterator over the values in a [`DenseSlotMap`].
 ///
 /// This iterator is created by [`DenseSlotMap::values`].
+#[cfg(feature = "rayon")]
 #[derive(Debug)]
 pub struct ParValues<'a, V: 'a> {
     inner: rayon::slice::Iter<'a, V>,
 }
 
+#[cfg(feature = "rayon")]
 impl<'a, V: 'a> Clone for ParValues<'a, V> {
     fn clone(&self) -> Self {
         ParValues {
@@ -1624,6 +1631,7 @@ where
 /// A parallel mutable iterator over the values in a [`DenseSlotMap`].
 ///
 /// This iterator is created by [`DenseSlotMap::par_values_mut`].
+#[cfg(feature = "rayon")]
 #[derive(Debug)]
 pub struct ParValuesMut<'a, V: 'a> {
     inner: rayon::slice::IterMut<'a, V>,
@@ -1672,6 +1680,7 @@ where
 ///
 /// This iterator is created by calling the `into_par_iter` method on [`DenseSlotMap`],
 /// provided by the [`IntoParallelIterator`] trait.
+#[cfg(feature = "rayon")]
 #[derive(Debug, Clone)]
 pub struct IntoParIter<K, V> {
     inner: rayon::iter::Zip<

@@ -1430,6 +1430,7 @@ pub struct ParIter<'a, K: 'a + Key, V: 'a> {
     _k: PhantomData<fn(K) -> K>,
 }
 
+#[cfg(feature = "rayon")]
 impl<'a, K: 'a + Key, V: 'a> Clone for ParIter<'a, K, V> {
     fn clone(&self) -> Self {
         ParIter {
@@ -1591,6 +1592,7 @@ pub struct ParKeys<'a, K: 'a + Key, V: 'a> {
     inner: ParIter<'a, K, V>,
 }
 
+#[cfg(feature = "rayon")]
 impl<'a, K: 'a + Key, V: 'a> Clone for ParKeys<'a, K, V> {
     fn clone(&self) -> Self {
         ParKeys {
@@ -1624,6 +1626,7 @@ pub struct ParValues<'a, K: 'a + Key, V: 'a> {
     inner: ParIter<'a, K, V>,
 }
 
+#[cfg(feature = "rayon")]
 impl<'a, K: 'a + Key, V: 'a> Clone for ParValues<'a, K, V> {
     fn clone(&self) -> Self {
         ParValues {
