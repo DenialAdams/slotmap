@@ -1452,7 +1452,6 @@ where
         C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
     {
         self.slots
-            .skip(1) // Skip sentinel.
             .filter_map(|(idx, slot)| {
                 if let Occupied(value) = slot.get() {
                     Some((KeyData::new(idx as u32, slot.version).into(), value))
@@ -1487,7 +1486,6 @@ where
         C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
     {
         self.slots
-            .skip(1) // Skip sentinel.
             .filter_map(|(idx, slot)| {
                 let version = slot.version;
                 if let OccupiedMut(value) = slot.get_mut() {
@@ -1524,7 +1522,6 @@ where
         C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
     {
         self.slots
-            .skip(1) // Skip sentinel.
             .filter_map(|(idx, mut slot)| {
                 if !slot.occupied() {
                     return None;
