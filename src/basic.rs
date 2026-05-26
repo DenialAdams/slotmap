@@ -1051,12 +1051,12 @@ impl<K: Key, V> SlotMap<K, V> {
     /// This function must iterate over all slots, empty or not. In the face of
     /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
-    pub fn par_keys(&self) -> impl ParallelIterator<Item = K> + '_
+    pub fn par_keys(&self) -> ParKeys<'_, K, V>
     where
         K: Send,
         V: Sync,
     {
-        self.par_iter().map(|(key, _)| key)
+        ParKeys { inner: self.par_iter() }
     }
 
     /// A parallel iterator visiting all values in an arbitrary order. The iterator
@@ -1065,12 +1065,12 @@ impl<K: Key, V> SlotMap<K, V> {
     /// This function must iterate over all slots, empty or not. In the face of
     /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
-    pub fn par_values(&self) -> impl ParallelIterator<Item = &V> + '_
+    pub fn par_values(&self) -> ParValues<'_, K, V>
     where
         K: Send,
         V: Sync,
     {
-        self.par_iter().map(|(_, value)| value)
+        ParValues { inner: self.par_iter() }
     }
 
     /// A parallel iterator visiting all values mutably in an arbitrary order. The
@@ -1079,12 +1079,12 @@ impl<K: Key, V> SlotMap<K, V> {
     /// This function must iterate over all slots, empty or not. In the face of
     /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
-    pub fn par_values_mut(&mut self) -> impl ParallelIterator<Item = &mut V> + '_
+    pub fn par_values_mut(&mut self) -> ParValuesMut<'_, K, V>
     where
         K: Send,
         V: Send,
     {
-        self.par_iter_mut().map(|(_, value)| value)
+        ParValuesMut { inner: self.par_iter_mut() }
     }
 }
 
@@ -1424,6 +1424,15 @@ pub struct ParIter<'a, K: 'a + Key, V: 'a> {
     _k: PhantomData<fn(K) -> K>,
 }
 
+impl<'a, K: 'a + Key, V: 'a> Clone for ParIter<'a, K, V> {
+    fn clone(&self) -> Self {
+        ParIter {
+            slots: self.slots.clone(),
+            _k: self._k,
+        }
+    }
+}
+
 #[cfg(feature = "rayon")]
 impl<'a, K, V> ParallelIterator for ParIter<'a, K, V>
 where
@@ -1517,6 +1526,7 @@ where
 
                 let key = KeyData::new(idx as u32, slot.version).into();
                 slot.version = 0;
+                // As with IntoIter, this is safe because we know the slot was occupied.
                 let value = unsafe { ManuallyDrop::take(&mut slot.u.value) };
                 Some((key, value))
             })
@@ -1568,7 +1578,95 @@ where K: Key + Send, V: Send {
 #[cfg(feature = "rayon")]
 #[derive(Debug)]
 pub struct ParKeys<'a, K: 'a + Key, V: 'a> {
-    inner: Iter<'a, K, V>,
+    inner: ParIter<'a, K, V>,
+}
+
+impl<'a, K: 'a + Key, V: 'a> Clone for ParKeys<'a, K, V> {
+    fn clone(&self) -> Self {
+        ParKeys {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "rayon")]
+impl<'a, K, V> ParallelIterator for ParKeys<'a, K, V>
+where
+    K: Key + Send,
+    V: Sync,
+{
+    type Item = K;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.inner
+            .map(|(key, _)| key)
+            .drive_unindexed(consumer)
+    }
+}
+
+/// A parallel iterator over the values in a [`SlotMap`].
+///
+/// This iterator is created by [`SlotMap::par_values`].
+#[cfg(feature = "rayon")]
+#[derive(Debug)]
+pub struct ParValues<'a, K: 'a + Key, V: 'a> {
+    inner: ParIter<'a, K, V>,
+}
+
+impl<'a, K: 'a + Key, V: 'a> Clone for ParValues<'a, K, V> {
+    fn clone(&self) -> Self {
+        ParValues {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "rayon")]
+impl<'a, K, V> ParallelIterator for ParValues<'a, K, V>
+where
+    K: Key + Send,
+    V: Sync,
+{
+    type Item = &'a V;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.inner
+            .map(|(_, value)| value)
+            .drive_unindexed(consumer)
+    }
+}
+
+/// A parallel mutable iterator over the values in a [`SlotMap`].
+///
+/// This iterator is created by [`SlotMap::par_values_mut`].
+#[cfg(feature = "rayon")]
+#[derive(Debug)]
+pub struct ParValuesMut<'a, K: 'a + Key, V: 'a> {
+    inner: ParIterMut<'a, K, V>,
+}
+
+#[cfg(feature = "rayon")]
+impl<'a, K, V> ParallelIterator for ParValuesMut<'a, K, V>
+where
+    K: Key + Send,
+    V: Send,
+{
+    type Item = &'a mut V;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        self.inner
+            .map(|(_, value)| value)
+            .drive_unindexed(consumer)
+    }
 }
 
 // Serialization with serde.
