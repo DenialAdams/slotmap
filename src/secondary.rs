@@ -873,13 +873,11 @@ impl<K: Key, V> SecondaryMap<K, V> {
             .par_iter_mut()
             .enumerate()
             .skip(1)
-            .filter_map(|(idx, slot)| {
-                match slot {
-                    Occupied { value, version } => {
-                        Some((KeyData::new(idx as u32, version.get()).into(), value))
-                    },
-                    Vacant => None,
-                }
+            .filter_map(|(idx, slot)| match slot {
+                Occupied { value, version } => {
+                    Some((KeyData::new(idx as u32, version.get()).into(), value))
+                },
+                Vacant => None,
             })
     }
 

@@ -1012,7 +1012,7 @@ impl<K: Key, V> SlotMap<K, V> {
 
     /// A parallel iterator visiting all key-value pairs in an arbitrary order.
     /// The iterator element type is `(K, &'a V)`.
-    /// 
+    ///
     /// This function must iterate over all slots, empty or not. In the face of
     /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
@@ -1030,7 +1030,7 @@ impl<K: Key, V> SlotMap<K, V> {
     /// A parallel iterator visiting all key-value pairs in an arbitrary order,
     /// with mutable references to the values. The iterator element type is
     /// `(K, &'a mut V)`.
-    /// 
+    ///
     /// This function must iterate over all slots, empty or not. In the face of
     /// many deleted elements it can be inefficient.
     #[cfg(feature = "rayon")]
@@ -1056,7 +1056,9 @@ impl<K: Key, V> SlotMap<K, V> {
         K: Send,
         V: Sync,
     {
-        ParKeys { inner: self.par_iter() }
+        ParKeys {
+            inner: self.par_iter(),
+        }
     }
 
     /// A parallel iterator visiting all values in an arbitrary order. The iterator
@@ -1070,7 +1072,9 @@ impl<K: Key, V> SlotMap<K, V> {
         K: Send,
         V: Sync,
     {
-        ParValues { inner: self.par_iter() }
+        ParValues {
+            inner: self.par_iter(),
+        }
     }
 
     /// A parallel iterator visiting all values mutably in an arbitrary order. The
@@ -1084,7 +1088,9 @@ impl<K: Key, V> SlotMap<K, V> {
         K: Send,
         V: Send,
     {
-        ParValuesMut { inner: self.par_iter_mut() }
+        ParValuesMut {
+            inner: self.par_iter_mut(),
+        }
     }
 }
 
@@ -1535,9 +1541,11 @@ where
 }
 
 #[cfg(feature = "rayon")]
-impl<'a, K, V> IntoParallelIterator for &'a SlotMap<K, V> where
+impl<'a, K, V> IntoParallelIterator for &'a SlotMap<K, V>
+where
     K: Key + Send,
-    V: Sync {
+    V: Sync,
+{
     type Item = (K, &'a V);
     type Iter = ParIter<'a, K, V>;
 
@@ -1547,9 +1555,11 @@ impl<'a, K, V> IntoParallelIterator for &'a SlotMap<K, V> where
 }
 
 #[cfg(feature = "rayon")]
-impl<'a, K, V> IntoParallelIterator for &'a mut SlotMap<K, V> where
+impl<'a, K, V> IntoParallelIterator for &'a mut SlotMap<K, V>
+where
     K: Key + Send,
-    V: Send {
+    V: Send,
+{
     type Item = (K, &'a mut V);
     type Iter = ParIterMut<'a, K, V>;
 
@@ -1560,7 +1570,10 @@ impl<'a, K, V> IntoParallelIterator for &'a mut SlotMap<K, V> where
 
 #[cfg(feature = "rayon")]
 impl<K, V> IntoParallelIterator for SlotMap<K, V>
-where K: Key + Send, V: Send {
+where
+    K: Key + Send,
+    V: Send,
+{
     type Item = (K, V);
     type Iter = IntoParIter<K, V>;
 
@@ -1601,9 +1614,7 @@ where
     where
         C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
     {
-        self.inner
-            .map(|(key, _)| key)
-            .drive_unindexed(consumer)
+        self.inner.map(|(key, _)| key).drive_unindexed(consumer)
     }
 }
 
@@ -1636,9 +1647,7 @@ where
     where
         C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
     {
-        self.inner
-            .map(|(_, value)| value)
-            .drive_unindexed(consumer)
+        self.inner.map(|(_, value)| value).drive_unindexed(consumer)
     }
 }
 
@@ -1663,9 +1672,7 @@ where
     where
         C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
     {
-        self.inner
-            .map(|(_, value)| value)
-            .drive_unindexed(consumer)
+        self.inner.map(|(_, value)| value).drive_unindexed(consumer)
     }
 }
 
